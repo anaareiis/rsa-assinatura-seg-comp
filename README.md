@@ -25,7 +25,7 @@ SHA3-256 e MGF1, seguindo a RFC 8017 (PKCS #1 v2.2).
 - [x] Estrutura do projeto, interfaces e testes-contrato
 - [x] Utilitários comuns: I2OSP/OS2IP, XOR, SHA3-256 (`comum/`)
 - [x] CLI integrada (`rsa_cli.py`) e roteiro de demonstração
-- [ ] Parte I — chaves RSA e Miller-Rabin
+- [x] Parte I — chaves RSA e Miller-Rabin
 - [ ] Parte II — RSA-OAEP e MGF1
 - [ ] Parte III — RSA-PSS
 - [ ] Parte IV — parsing e verificação
