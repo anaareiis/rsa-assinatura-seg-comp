@@ -1,0 +1,76 @@
+\documentclass[10pt,aspectratio=169]{beamer}
+\usetheme[progressstyle=movingCircCnt]{Feather}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english,brazil]{babel}
+\usepackage{helvet}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\definecolor{unbblue}{RGB}{0,51,102}
+\definecolor{unbgreen}{RGB}{33,140,33}
+\definecolor{softgreen}{RGB}{230,244,230}
+\setbeamercolor{alerted text}{fg=unbgreen}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\setbeamertemplate{itemize item}{\color{unbgreen}$\blacktriangleright$}
+\setbeamertemplate{itemize subitem}{\color{unbgreen}$\bullet$}
+
+\title[Assinatura Digital RSA]{\textbf{Sistema de Assinatura Digital:\\RSA-OAEP e RSA-PSS}}
+\subtitle[CIC0201]{Trabalho de Implementação 2 -- CIC0201}
+\author[Grupo]{Ana Luísa Reis Nascente \and Gabriel de Sousa\\Marina Pimentel Moreno \and Pedro de Paula Campos}
+\institute[]{Segurança Computacional\\Universidade de Brasília}
+\date{29 de setembro de 2026}
+
+\newcommand{\source}[1]{\vfill{\tiny\color{gray}Fonte: #1}}
+
+\begin{document}
+
+{\1
+\begin{frame}[plain,noframenumbering]
+  \titlepage
+\end{frame}}
+
+\section{Introdução}
+\begin{frame}{Introdução}{RSA para cifragem $\times$ RSA para assinatura}
+  % TODO
+\end{frame}
+
+\section{Parte I -- Chaves RSA}
+\begin{frame}{Geração de chaves}{Miller-Rabin e parâmetros CRT}
+  % TODO Gabriel
+\end{frame}
+
+\section{Parte II -- RSA-OAEP}
+\begin{frame}{RSA-OAEP}{MGF1 e detecção de adulteração}
+  % TODO Ana
+\end{frame}
+
+\section{Parte III -- RSA-PSS}
+\begin{frame}{RSA-PSS}{Salt, MGF1 e Base64}
+  % TODO Marina
+\end{frame}
+
+\section{Parte IV -- Verificação}
+\begin{frame}{Verificação e adulteração}{Arquivo, assinatura e chave pública}
+  % TODO Pedro
+\end{frame}
+
+\section{Parte V -- Análise de segurança}
+\begin{frame}{Análise de segurança}{Textbook RSA, OAEP, PSS e Ed25519}
+  % TODO Pedro
+\end{frame}
+
+\section{Demonstração}
+\begin{frame}{Demonstração}
+  \centering\large \texttt{bash exemplos/demo.sh}
+\end{frame}
+
+\section{Conclusão}
+\begin{frame}{Conclusão}
+  % TODO
+\end{frame}
+
+\end{document}

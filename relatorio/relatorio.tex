@@ -1,0 +1,110 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazilian]{babel}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+
+\begin{document}
+
+\title{Sistema de Assinatura Digital com RSA-OAEP e RSA-PSS\\
+\large Trabalho de Implementação 2 --- CIC0201 Segurança Computacional}
+
+\author{
+\IEEEauthorblockN{Ana Luísa Reis Nascente}
+\IEEEauthorblockA{Matrícula: 211045688}
+\and
+\IEEEauthorblockN{Gabriel de Sousa}
+\IEEEauthorblockA{Matrícula: 211056000}
+\and
+\IEEEauthorblockN{Marina Pimentel Moreno}
+\IEEEauthorblockA{Matrícula: 222014071}
+\and
+\IEEEauthorblockN{Pedro de Paula Campos}
+\IEEEauthorblockA{Matrícula: 231036050}
+}
+
+\maketitle
+
+\begin{abstract}
+% TODO (até 5 linhas): o que foi implementado (chaves RSA-2048 com
+% Miller-Rabin, OAEP e PSS com SHA3-256/MGF1), como foi validado (testes de
+% adulteração e interoperabilidade) e principal resultado.
+\end{abstract}
+
+\begin{IEEEkeywords}
+RSA, OAEP, PSS, assinatura digital, SHA-3
+\end{IEEEkeywords}
+
+\section{Introdução}
+% Contexto: criptografia assimétrica na disciplina; diferença entre usar o
+% RSA para cifragem e para assinatura \cite{roteiro,rfc8017}.
+% Última frase: organização do relatório (Seções II, III, IV).
+
+\section{Fundamentação Teórica}
+\label{sec:fundamentacao}
+
+\subsection{RSA e geração de chaves}
+% n = pq, lambda(n), e = 65537, d, CRT; Miller-Rabin \cite{sp80056b,fips1865}.
+
+\subsection{Função hash SHA3-256 e MGF1}
+% Esponja Keccak \cite{fips202}; MGF1 como gerador de máscara.
+
+\subsection{RSA-OAEP}
+% Codificação EME-OAEP, Feistel de duas rodadas, IND-CCA2 \cite{rfc8017}.
+
+\subsection{RSA-PSS}
+% EMSA-PSS, salt, trailer 0xbc; por que não é ``cifrar o hash''.
+
+\subsection{Análise de segurança}
+% Parte V: textbook RSA (determinismo, maleabilidade, e pequeno),
+% papel do OAEP e do PSS, comparação com Ed25519 \cite{rfc8032}.
+% Ver parte5_analise/README.md.
+
+\section{Ambiente Experimental e Análise de Resultados}
+\label{sec:experimental}
+
+\subsection{Descrição do Cenário}
+% Hardware, SO, versão do Python, bibliotecas permitidas (hashlib, secrets),
+% arquitetura do código (partes I--IV), formato das chaves e da assinatura.
+
+\subsection{Análise de Resultados}
+% Parte I: tempo de geração das chaves, rodadas de Miller-Rabin.
+% Parte II: ida e volta OAEP, tamanho máximo (190 bytes), detecção de
+%           ciphertext adulterado e rótulo errado.
+% Parte III: assinaturas probabilísticas, Base64.
+% Parte IV: tabela com os casos (a) byte do arquivo, (b) byte da assinatura,
+%           (c) chave pública -> resultado esperado x obtido.
+% Interoperabilidade com a biblioteca cryptography.
+% Problemas encontrados e soluções.
+
+\section{Conclusões}
+\label{sec:conclusoes}
+% Entre 5 e 10 linhas.
+
+\begin{thebibliography}{9}
+
+\bibitem{roteiro}
+P.~S.~Barreto, ``Trabalho de Implementação 2 -- Sistema de Assinatura Digital e Verificação Segura de Arquivos,'' CIC0201 Segurança Computacional, Universidade de Brasília, 2026.
+
+\bibitem{rfc8017}
+K.~Moriarty, B.~Kaliski, J.~Jonsson e A.~Rusch, ``PKCS \#1: RSA Cryptography Specifications Version 2.2,'' RFC 8017, IETF, 2016.
+
+\bibitem{fips202}
+NIST, ``SHA-3 Standard: Permutation-Based Hash and Extendable-Output Functions,'' FIPS PUB 202, 2015.
+
+\bibitem{fips1865}
+NIST, ``Digital Signature Standard (DSS),'' FIPS PUB 186-5, 2023.
+
+\bibitem{sp80056b}
+NIST, ``Recommendation for Pair-Wise Key-Establishment Using Integer Factorization Cryptography,'' SP 800-56B Rev.~2, 2019.
+
+\bibitem{rfc8032}
+S.~Josefsson e I.~Liusvaara, ``Edwards-Curve Digital Signature Algorithm (EdDSA),'' RFC 8032, IETF, 2017.
+
+\end{thebibliography}
+
+\end{document}

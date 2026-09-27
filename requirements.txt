@@ -1,0 +1,8 @@
+# A implementação usa somente a biblioteca padrão do Python (>= 3.8):
+# hashlib.sha3_256, base64, secrets, json e unittest.
+#
+# Opcional: usada APENAS no teste adicional de interoperabilidade
+# (parte4_verificacao/testes/test_interoperabilidade.py), que é pulado
+# automaticamente se a biblioteca não estiver instalada.
+# PSS com SHA3 funciona desde a 3.4; OAEP com SHA3 exige versões recentes.
+cryptography>=42

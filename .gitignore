@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+*.swp
+
+# Chaves e assinaturas geradas nas demonstrações (nunca versionar chave privada)
+*.pem
+chaves/
+exemplos/saida/
+
+# LaTeX build artifacts (mantemos só o .tex versionado)
+relatorio/*.aux
+relatorio/*.fdb_latexmk
+relatorio/*.fls
+relatorio/*.log
+relatorio/*.out
+relatorio/*.synctex.gz
+relatorio/relatorio.pdf
