@@ -115,6 +115,15 @@ class TesteOAEP(unittest.TestCase):
         with self.assertRaises(ErroDecifracao):
             decifrar_oaep(self.priv, b"\x01\x02\x03")
 
+    def test_ciphertext_maior_que_n(self):
+        with self.assertRaises(ErroDecifracao):
+            decifrar_oaep(self.priv, b"\xff" * self.pub.k)
+
+    def test_chave_errada(self):
+        outra = gerar_par_chaves(2048)
+        with self.assertRaises(ErroDecifracao):
+            decifrar_oaep(outra, cifrar_oaep(self.pub, b"segredo"))
+
 
 if __name__ == "__main__":
     unittest.main()

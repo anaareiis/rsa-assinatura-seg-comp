@@ -6,10 +6,11 @@ Tamanho máximo da mensagem: k - 2*H_LEN - 2 bytes (190 bytes para RSA-2048).
 import hmac
 import secrets
 
-from comum.conversoes import xor_bytes
+from comum.conversoes import i2osp, os2ip, xor_bytes
 from comum.erros import ErroDecifracao, ErroParametro
 from comum.hash_sha3 import H_LEN, sha3_256
 from parte1_chaves.chaves import ChavePrivada, ChavePublica
+from parte1_chaves.rsa_primitivas import rsadp, rsaep
 from parte2_oaep.mgf1 import mgf1
 
 # Mensagem única para toda falha de decifração: mensagens diferentes para
@@ -76,9 +77,17 @@ def oaep_decodificar(em: bytes, k: int, rotulo: bytes = b"") -> bytes:
 
 def cifrar_oaep(chave: ChavePublica, mensagem: bytes, rotulo: bytes = b"") -> bytes:
     """RSAES-OAEP-ENCRYPT: retorna o ciphertext com k bytes."""
-    raise NotImplementedError("TODO Pessoa B")
+    em = oaep_codificar(mensagem, chave.k, rotulo)
+    c = rsaep(chave, os2ip(em))
+    return i2osp(c, chave.k)
 
 
 def decifrar_oaep(chave: ChavePrivada, cifra: bytes, rotulo: bytes = b"") -> bytes:
     """RSAES-OAEP-DECRYPT: valida len(cifra) == k e c < n; ErroDecifracao em falha."""
-    raise NotImplementedError("TODO Pessoa B")
+    if len(cifra) != chave.k:
+        raise ErroDecifracao(_FALHA)
+    c = os2ip(cifra)
+    if c >= chave.n:
+        raise ErroDecifracao(_FALHA)
+    em = i2osp(rsadp(chave, c), chave.k)
+    return oaep_decodificar(em, chave.k, rotulo)
