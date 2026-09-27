@@ -2,12 +2,12 @@
 
 A biblioteca `cryptography` é usada somente para conferir a saída da nossa
 implementação — nunca para produzi-la. O teste é pulado se ela não existir.
+O OAEP é conferido em parte2_oaep/testes/test_interoperabilidade_oaep.py.
 """
 
 import unittest
 
 try:
-    from cryptography.exceptions import UnsupportedAlgorithm
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.asymmetric import padding, rsa
     TEM_CRYPTOGRAPHY = True
@@ -16,7 +16,6 @@ except ImportError:  # pragma: no cover
 
 from comum.hash_sha3 import H_LEN, sha3_256
 from parte1_chaves.chaves import gerar_par_chaves
-from parte2_oaep.oaep import cifrar_oaep, decifrar_oaep
 from parte3_pss.pss import assinar_digest
 
 
@@ -38,24 +37,6 @@ class TesteInteroperabilidade(unittest.TestCase):
             padding.PSS(mgf=padding.MGF1(hashes.SHA3_256()), salt_length=H_LEN),
             hashes.SHA3_256(),
         )
-
-    def _oaep_lib(self):
-        return padding.OAEP(mgf=padding.MGF1(hashes.SHA3_256()), algorithm=hashes.SHA3_256(), label=None)
-
-    def test_oaep_biblioteca_para_nos(self):
-        try:
-            cifra = self.lib_pub.encrypt(b"segredo", self._oaep_lib())
-        except UnsupportedAlgorithm:
-            self.skipTest("versão da cryptography não suporta OAEP com SHA3-256")
-        self.assertEqual(decifrar_oaep(self.nossa, cifra), b"segredo")
-
-    def test_oaep_nos_para_biblioteca(self):
-        cifra = cifrar_oaep(self.nossa.publica(), b"segredo")
-        try:
-            decifrado = self.lib_priv.decrypt(cifra, self._oaep_lib())
-        except UnsupportedAlgorithm:
-            self.skipTest("versão da cryptography não suporta OAEP com SHA3-256")
-        self.assertEqual(decifrado, b"segredo")
 
 
 if __name__ == "__main__":
