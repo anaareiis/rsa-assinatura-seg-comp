@@ -17,6 +17,15 @@ class TesteMGF1(unittest.TestCase):
         self.assertEqual(len(longa), 100)
         self.assertEqual(mgf1(b"abc", 40), longa[:40])
 
+    def test_segundo_bloco_usa_contador_1(self):
+        semente = b"semente"
+        self.assertEqual(mgf1(semente, 2 * H_LEN)[H_LEN:], sha3_256(semente + b"\x00\x00\x00\x01"))
+
+    def test_tamanho_zero_e_negativo(self):
+        self.assertEqual(mgf1(b"abc", 0), b"")
+        with self.assertRaises(ErroParametro):
+            mgf1(b"abc", -1)
+
 
 class TesteOAEP(unittest.TestCase):
     @classmethod
