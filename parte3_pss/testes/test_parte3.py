@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 
+from comum.erros import ErroParametro
 from comum.hash_sha3 import sha3_256
 from parte1_chaves.chaves import gerar_par_chaves
 from parte3_pss.assinatura import assinar_arquivo
@@ -20,6 +21,34 @@ class TesteEMSAPSS(unittest.TestCase):
         em = emsa_pss_codificar(h, 2047)
         self.assertTrue(emsa_pss_verificar(h, em, 2047))
         self.assertFalse(emsa_pss_verificar(sha3_256(b"outra"), em, 2047))
+
+    def test_rejeita_codificacao_adulterada(self):
+        h = sha3_256(b"msg")
+        em = bytearray(emsa_pss_codificar(h, 2047))
+
+        trailer_adulterado = bytearray(em)
+        trailer_adulterado[-1] ^= 0x01
+        self.assertFalse(emsa_pss_verificar(h, bytes(trailer_adulterado), 2047))
+
+        bits_superiores_adulterados = bytearray(em)
+        bits_superiores_adulterados[0] |= 0x80
+        self.assertFalse(emsa_pss_verificar(h, bytes(bits_superiores_adulterados), 2047))
+
+        self.assertFalse(emsa_pss_verificar(h, bytes(em[:-1]), 2047))
+
+    def test_parametros_invalidos(self):
+        h = sha3_256(b"msg")
+        with self.assertRaises(ErroParametro):
+            emsa_pss_codificar(h[:-1], 2047)
+        with self.assertRaises(ErroParametro):
+            emsa_pss_codificar(h, 511, 32)
+        with self.assertRaises(ErroParametro):
+            emsa_pss_codificar(h, 2047, -1)
+
+    def test_salt_vazio(self):
+        h = sha3_256(b"msg")
+        em = emsa_pss_codificar(h, 2047, tamanho_salt=0)
+        self.assertTrue(emsa_pss_verificar(h, em, 2047, tamanho_salt=0))
 
 
 class TesteRSAPSS(unittest.TestCase):
@@ -53,6 +82,16 @@ class TesteRSAPSS(unittest.TestCase):
             self.assertEqual(len(base64.b64decode(b64, validate=True)), self.pub.k)
         finally:
             os.remove(f.name)
+
+    def test_assinaturas_invalidas_retornam_false(self):
+        h = sha3_256(b"documento")
+        assinatura = assinar_digest(self.priv, h)
+
+        self.assertFalse(verificar_digest(self.pub, h, assinatura[:-1]))
+        self.assertFalse(verificar_digest(self.pub, h[:-1], assinatura))
+        self.assertFalse(verificar_digest(
+            self.pub, h, self.pub.n.to_bytes(self.pub.k, "big")
+        ))
 
 
 if __name__ == "__main__":
