@@ -2,8 +2,7 @@
 
 ## Responsável
 
-- **Pessoa D** — Pedro de Paula Campos (231036050), também responsável pela
-  integração (CLI), análise de segurança, relatório e slides.
+- **Pessoa D** — Pedro de Paula Campos (231036050)
 
 ## O que implementar
 
