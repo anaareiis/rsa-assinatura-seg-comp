@@ -4,7 +4,7 @@
 
 - **Pessoa D** — Pedro de Paula Campos (231036050)
 
-## O que implementar
+## Implementação
 
 | Arquivo | Conteúdo |
 |---|---|

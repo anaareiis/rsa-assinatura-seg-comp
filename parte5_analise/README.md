@@ -1,8 +1,9 @@
 # Parte V — Análise de segurança
 
-Rascunho dos pontos que devem estar no relatório (Seção de Fundamentação
-e Análise) e na arguição. Responsável pela redação final: **Pessoa D**;
-cada integrante revisa o tópico da própria parte.
+Análise de segurança pedida na Parte V do roteiro. A versão final está na
+Seção II-E do relatório (`relatorio/relatorio.pdf`) e nos slides da Parte V.
+
+Responsável: **Pessoa D** — Pedro de Paula Campos (231036050).
 
 ## 1. Por que RSA sem padding seguro (textbook RSA) não deve ser usado
 

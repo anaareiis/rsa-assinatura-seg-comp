@@ -4,7 +4,7 @@
 
 - **Pessoa C** — Marina Pimentel Moreno (222014071)
 
-## O que implementar
+## Implementação
 
 | Arquivo | Conteúdo |
 |---|---|

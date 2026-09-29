@@ -4,7 +4,7 @@
 
 - **Pessoa A** — Gabriel de Sousa (211056000)
 
-## O que implementar
+## Implementação
 
 | Arquivo | Conteúdo |
 |---|---|
