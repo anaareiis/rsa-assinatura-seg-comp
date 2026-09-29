@@ -39,8 +39,8 @@
 Implementamos RSA-OAEP e RSA-PSS com SHA3-256/MGF1 e chaves de 2048 bits
 via Miller-Rabin, sem bibliotecas criptográficas de alto nível. Testes
 automatizados validaram o limite de 190 bytes do OAEP, a natureza
-probabilística do PSS e a matriz de adulteração da Parte IV, com
-interoperabilidade confirmada.
+probabilística do PSS e a matriz de adulteração da Parte IV; OAEP e PSS
+interoperam, nos dois sentidos, com bibliotecas de referência.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -110,7 +110,7 @@ bits) e probabilidade de erro $\le 2^{-100}$, exige apenas
 \textbf{4 rodadas} -- muito menos que o limite genérico de pior caso
 ($4^{-t}$ por rodada, válido para qualquer composto), pois a fração de
 candidatos aleatórios que sobrevivem a $t$ rodadas cai mais rápido que essa
-cota (Damgård, Landrock e Pomerance, 1993).
+cota \cite{dlp93}.
 
 \subsection{Função Hash SHA3-256 e MGF1}
 
@@ -139,9 +139,11 @@ bytes; gera-se uma semente aleatória $seed$ de 32 bytes
 $maskedDB = DB \oplus \text{MGF1}(seed, 223)$ e
 $maskedSeed = seed \oplus \text{MGF1}(maskedDB, 32)$; o bloco codificado
 $EM = 0x00 \Vert maskedSeed \Vert maskedDB$ é cifrado como
-$c = m^e \bmod n$. Na decifragem, qualquer desvio no byte inicial, no
-$lHash$ ou no separador resulta em rejeição genérica, prevenindo oráculos
-de padding (ataques de Manger ou Bleichenbacher).
+$c = m^e \bmod n$. Na decifragem, qualquer desvio no tamanho, no byte
+inicial, no $lHash$ ou no separador resulta na mesma rejeição genérica;
+a decodificação percorre todo o bloco sem sair antecipadamente e testa as
+condições de uma só vez, para não criar um oráculo de padding
+\cite{manger01}.
 
 \subsection{RSA-PSS}
 
@@ -172,9 +174,9 @@ cúbica inteira do ciphertext (ataque de Håstad).
 \subsubsection{Papel do OAEP e do PSS}
 O OAEP elimina o determinismo e a maleabilidade injetando aleatoriedade e
 espalhando a mensagem por todo o bloco codificado, com segurança IND-CCA2
-provada no modelo de oráculo aleatório (Bellare--Rogaway, 1994). O PSS
+provada no modelo de oráculo aleatório \cite{br94}. O PSS
 estende o hash com \textit{salt} aleatório e tem redução de segurança
-\textit{tight} ao problema RSA no mesmo modelo -- ao contrário do PKCS\#1
+\textit{tight} ao problema RSA no mesmo modelo \cite{br96} -- ao contrário do PKCS\#1
 v1.5, historicamente vulnerável a ataques como o de Bleichenbacher (2006)
 \cite{rfc8017}.
 
@@ -218,9 +220,10 @@ estrito da estrutura JSON \texttt{rsa-segcomp-assinatura-v1} e verificação
 de integridade); e \texttt{rsa\_cli.py}, uma CLI integrada que expõe os
 subcomandos \texttt{gerar-chaves}, \texttt{cifrar}, \texttt{decifrar},
 \texttt{assinar} e \texttt{verificar}. Cada módulo tem suíte própria de
-testes automatizados com \texttt{unittest}, além de um teste de
-interoperabilidade com a biblioteca \texttt{cryptography}, permitido pelo
-enunciado apenas para essa verificação cruzada.
+testes automatizados com \texttt{unittest}, além de testes de
+interoperabilidade com as bibliotecas \texttt{cryptography} (PSS) e
+\texttt{pycryptodome} (OAEP), permitidas pelo enunciado apenas para essa
+verificação cruzada.
 
 Os experimentos a seguir foram executados em uma máquina com processador
 AMD Ryzen 9 5900XT (16 núcleos/32 threads), 32~GB de RAM, sistema
@@ -338,27 +341,30 @@ clara (Figura~\ref{fig:demo}).
 
 \subsection{Interoperabilidade e Suíte Automatizada}
 
-O teste adicional de interoperabilidade (\texttt{test\_interoperabilidade.py}),
-usando a biblioteca \texttt{cryptography} apenas para conferência cruzada
-conforme permitido pelo enunciado, confirmou que: (1) assinaturas RSA-PSS
-geradas pela nossa implementação são aceitas pelas rotinas oficiais da
-biblioteca; e (2) assinaturas produzidas pela biblioteca são aceitas pela
-nossa rotina \texttt{verificar\_arquivo}. O alinhamento dos digests
-SHA3-256, das máscaras MGF1 e do trailer $0xBC$ confirma a corretude frente
-à RFC 8017.
+Os testes adicionais de interoperabilidade usam bibliotecas consolidadas
+apenas para conferir a saída da implementação, conforme permitido pelo
+enunciado, sempre nos dois sentidos. Para o PSS, com a \texttt{cryptography}:
+(1) assinaturas geradas pela nossa implementação são aceitas pela
+biblioteca; e (2) assinaturas produzidas pela biblioteca são aceitas por
+\texttt{verificar\_digest} e, sobre um arquivo real, por
+\texttt{verificar\_arquivo}. Para o OAEP, a \texttt{cryptography} não
+aceita SHA3-256 como hash do OAEP, por isso a conferência usa a
+\texttt{pycryptodome}: ciphertexts gerados por nós (de 0 a 190 bytes) são
+decifrados pela biblioteca e vice-versa, inclusive com rótulo $L$ não
+vazio. A concordância dos digests SHA3-256, das máscaras MGF1 e do
+\textit{trailer} $0xBC$ confirma a conformidade com a RFC 8017.
 
-A suíte completa (\texttt{python3 -m unittest discover}), reproduzida na
-Figura~\ref{fig:testes}, executou 50 testes: 47 passaram e 3 foram
-pulados por ausência da biblioteca opcional \texttt{pycryptodome} (um
-segundo teste de interoperabilidade, redundante com o já citado, que usamos
-apenas como checagem extra) -- \textbf{nenhuma falha}. A
-Figura~\ref{fig:resultado-testes} discrimina os testes aprovados por parte
-do trabalho.
+A suíte completa, reproduzida na Figura~\ref{fig:testes}, executou
+\textbf{52 testes, todos aprovados},
+dos quais 6 de interoperabilidade. A Figura~\ref{fig:resultado-testes}
+discrimina os testes por parte do trabalho. Sem as bibliotecas opcionais
+instaladas, os testes de interoperabilidade são pulados automaticamente
+e os demais continuam executando.
 
 \begin{figure}[!t]
 \centering
 \includegraphics[width=0.95\linewidth]{figs/resultado_testes.pdf}
-\caption{Testes aprovados por módulo (50 no total, 3 pulados por dependência opcional).}
+\caption{Testes aprovados por parte (52 no total; em azul, os de interoperabilidade).}
 \label{fig:resultado-testes}
 \end{figure}
 
@@ -374,18 +380,16 @@ do trabalho.
 \section{Conclusões}
 \label{sec:conclusoes}
 
-O sistema cumpriu os requisitos funcionais das Partes I a IV e a análise de
-segurança da Parte V, sem bibliotecas criptográficas de alto nível para os
-cálculos numéricos. Chaves, RSA-OAEP e RSA-PSS foram validados com dados
-reais: 8 gerações de chave (média 0,365~s), rejeição correta acima de 190
-bytes, cinco assinaturas distintas do mesmo arquivo e uma matriz de
-adulteração com quatro cenários, todos rejeitados. A suíte de 50 testes não
-registrou falhas, e a biblioteca \texttt{cryptography} confirmou a
-conformidade com a RFC 8017. A assimetria de desempenho entre chave pública
-e privada (até $\sim$40$\times$) reforça, na prática, por que RSA puro é
-inadequado e por que os esquemas probabilísticos permanecem essenciais.
+O sistema cumpriu as Partes I a V sem bibliotecas criptográficas para
+geração de chaves, operações RSA, OAEP, MGF1 ou PSS. As chaves RSA-2048
+foram geradas em 0,365~s em média, com 4 rodadas de Miller-Rabin por
+candidato. O OAEP rejeitou mensagens acima de 190 bytes e qualquer
+ciphertext adulterado com um erro único, e o PSS gerou assinaturas
+distintas para o mesmo arquivo. Todos os cenários de adulteração foram
+rejeitados, e os 52 testes passaram, com interoperabilidade nos dois
+sentidos. A segurança vem do padding probabilístico, não do RSA isolado.
 
-\begin{thebibliography}{9}
+\begin{thebibliography}{10}
 
 \bibitem{roteiro}
 P.~S.~Barreto, ``Trabalho de Implementação 2 -- Sistema de Assinatura Digital e Verificação Segura de Arquivos,'' CIC0201 Segurança Computacional, Universidade de Brasília, 2026.
@@ -404,6 +408,18 @@ NIST, ``Recommendation for Pair-Wise Key-Establishment Using Integer Factorizati
 
 \bibitem{rfc8032}
 S.~Josefsson e I.~Liusvaara, ``Edwards-Curve Digital Signature Algorithm (EdDSA),'' RFC 8032, IETF, 2017.
+
+\bibitem{dlp93}
+I.~Damgård, P.~Landrock e C.~Pomerance, ``Average case error estimates for the strong probable prime test,'' \textit{Mathematics of Computation}, vol.~61, n.~203, pp.~177--194, 1993.
+
+\bibitem{br94}
+M.~Bellare e P.~Rogaway, ``Optimal Asymmetric Encryption,'' em \textit{Advances in Cryptology -- EUROCRYPT '94}, LNCS 950, Springer, 1995, pp.~92--111.
+
+\bibitem{br96}
+M.~Bellare e P.~Rogaway, ``The Exact Security of Digital Signatures -- How to Sign with RSA and Rabin,'' em \textit{Advances in Cryptology -- EUROCRYPT '96}, LNCS 1070, Springer, 1996, pp.~399--416.
+
+\bibitem{manger01}
+J.~Manger, ``A Chosen Ciphertext Attack on RSA Optimal Asymmetric Encryption Padding (OAEP) as Standardized in PKCS \#1 v2.0,'' em \textit{Advances in Cryptology -- CRYPTO 2001}, LNCS 2139, Springer, 2001, pp.~230--238.
 
 \end{thebibliography}
 
