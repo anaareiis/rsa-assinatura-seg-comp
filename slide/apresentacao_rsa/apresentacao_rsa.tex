@@ -4,15 +4,20 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[english,brazil]{babel}
+\usepackage{lmodern}
 \usepackage{helvet}
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta,positioning}
+\usetikzlibrary{arrows.meta,positioning,fit,calc}
+
+\graphicspath{{../../relatorio/figs/}}
 
 \definecolor{unbblue}{RGB}{0,51,102}
 \definecolor{unbgreen}{RGB}{33,140,33}
 \definecolor{softgreen}{RGB}{230,244,230}
+\definecolor{softblue}{RGB}{225,234,245}
+\definecolor{softred}{RGB}{250,228,228}
 \setbeamercolor{alerted text}{fg=unbgreen}
 \setbeamerfont{frametitle}{size=\large,series=\bfseries}
 \setbeamertemplate{itemize item}{\color{unbgreen}$\blacktriangleright$}
@@ -26,6 +31,15 @@
 
 \newcommand{\source}[1]{\vfill{\tiny\color{gray}Fonte: #1}}
 
+\tikzset{
+  box/.style={draw=unbblue, rounded corners, fill=softgreen, minimum height=9mm,
+    text width=21mm, align=center, font=\small},
+  bloco/.style={draw=unbblue, fill=softblue, minimum height=7mm, align=center, font=\footnotesize},
+  op/.style={draw=unbgreen, circle, thick, inner sep=1pt, font=\small},
+  mgf/.style={draw=unbblue, fill=white, font=\scriptsize, inner sep=3pt},
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, draw=unbgreen},
+}
+
 \begin{document}
 
 {\1
@@ -33,44 +47,384 @@
   \titlepage
 \end{frame}}
 
+% ---------------------------------------------------------------- Introdução
 \section{Introdução}
-\begin{frame}{Introdução}{RSA para cifragem $\times$ RSA para assinatura}
-  % TODO
+\begin{frame}{Introdução}{Um mesmo RSA, dois usos diferentes}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{block}{Cifragem (Parte II)}
+        \begin{itemize}
+          \item Objetivo: \textbf{sigilo}.
+          \item Quem envia cifra com a chave \textbf{pública}.
+          \item Só o dono da chave \textbf{privada} decifra.
+          \item Esquema: \textbf{RSA-OAEP} (até 190 bytes).
+        \end{itemize}
+      \end{block}
+    \column{0.48\textwidth}
+      \begin{block}{Assinatura (Parte III)}
+        \begin{itemize}
+          \item Objetivo: \textbf{autenticidade e integridade}.
+          \item O dono assina com a chave \textbf{privada}.
+          \item Qualquer um verifica com a chave \textbf{pública}.
+          \item Esquema: \textbf{RSA-PSS} sobre o SHA3-256.
+        \end{itemize}
+      \end{block}
+  \end{columns}
+  \vspace{2pt}
+  \begin{alertblock}{Restrição do roteiro}
+    Chaves, Miller-Rabin, RSA, OAEP, MGF1 e PSS feitos pelo grupo; bibliotecas prontas só para SHA3-256 e para conferir a saída.
+  \end{alertblock}
+  \source{Roteiro do Trabalho de Implementação 2 -- CIC0201, UnB (2026); RFC 8017 (PKCS \#1 v2.2).}
 \end{frame}
 
+\begin{frame}{Introdução}{Arquitetura do sistema}
+  \centering
+  \begin{tikzpicture}[node distance=6mm and 14mm]
+    \node[box, text width=28mm] (p1) {\textbf{Parte I}\\chaves RSA-2048\\Miller-Rabin};
+    \node[box, above right=0mm and 16mm of p1] (p2) {\textbf{Parte II}\\MGF1 + OAEP};
+    \node[box, below right=0mm and 16mm of p1] (p3) {\textbf{Parte III}\\PSS + Base64};
+    \node[box, right=of p3] (p4) {\textbf{Parte IV}\\parsing e\\verificação};
+    \node[box, right=of p2, fill=softblue] (c) {cifrar /\\decifrar};
+    \node[box, right=of p4, fill=softblue] (r) {íntegro ou\\inválido};
+    \draw[arrow] (p1.east) -- (p2.west) node[pos=0.45, above left, font=\scriptsize] {rsaep / rsadp};
+    \draw[arrow] (p1.east) -- (p3.west) node[pos=0.45, below left, font=\scriptsize] {rsasp1 / rsavp1};
+    \draw[arrow, dashed] (p2) -- node[right, font=\scriptsize] {MGF1} (p3);
+    \draw[arrow] (p2) -- (c);
+    \draw[arrow] (p3) -- node[above, font=\scriptsize] {.sig} (p4);
+    \draw[arrow] (p4) -- (r);
+  \end{tikzpicture}
+
+  \vspace{10pt}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \textbf{Python 3}, só biblioteca padrão: \texttt{secrets} (aleatoriedade), \texttt{hashlib.sha3\_256}, \texttt{base64}, \texttt{json}.
+    \column{0.48\textwidth}
+      \textbf{CLI integrada:} \texttt{gerar-chaves}, \texttt{cifrar}, \texttt{decifrar}, \texttt{assinar}, \texttt{verificar}.
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- Parte I
 \section{Parte I -- Chaves RSA}
-\begin{frame}{Geração de chaves}{Miller-Rabin e parâmetros CRT}
-  % TODO Gabriel
+\begin{frame}{Parte I -- Geração de chaves}{Do primo ao par de chaves}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.50\textwidth}
+      \begin{block}{Par de chaves (FIPS 186-5, A.1.1)}
+        \begin{enumerate}
+          \item $p, q$ de 1024 bits, distintos, $|p-q| > 2^{412}$
+          \item $n = pq$ \quad $\lambda(n) = \mathrm{mmc}(p-1, q-1)$
+          \item $e = 65537$ \quad $d = e^{-1} \bmod \lambda(n)$
+          \item CRT: $d_p$, $d_q$, $q_{inv}$ (decifra $\approx 4\times$ mais rápido)
+        \end{enumerate}
+      \end{block}
+      \small Aritmética própria: Euclides estendido, inverso modular e exponenciação por quadrados sucessivos.
+    \column{0.46\textwidth}
+      \begin{block}{Miller-Rabin}
+        $n - 1 = 2^s d$, base $a$ aleatória:\\[3pt]
+        $x = a^d \bmod n$; se $x \in \{1, n-1\}$ passa,\\
+        senão eleva ao quadrado até $s-1$ vezes.
+      \end{block}
+      \begin{itemize}
+        \item Crivo com primos $< 1000$ antes do teste.
+        \item \textbf{4 rodadas} para primos de 1024 bits: Tabela B.1 da FIPS 186-5, erro $\le 2^{-100}$.
+      \end{itemize}
+  \end{columns}
+  \source{FIPS 186-5, Apêndices A.1.1 e B.3; Damgård, Landrock e Pomerance (1993).}
 \end{frame}
 
+\begin{frame}{Parte I -- Resultados}{Geração de chaves RSA-2048}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{tempo_geracao_chaves.pdf}\\
+      {\scriptsize Tempo por geração (8 execuções)}
+    \column{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{candidatos_miller_rabin.pdf}\\
+      {\scriptsize Candidatos testados até achar cada primo}
+  \end{columns}
+  \vspace{6pt}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.32\textwidth}
+      \centering{\Large\color{unbgreen}\textbf{0,365 s}}\\ \small tempo médio
+    \column{0.32\textwidth}
+      \centering{\Large\color{unbgreen}\textbf{14--794}}\\ \small candidatos por primo
+    \column{0.32\textwidth}
+      \centering{\Large\color{unbgreen}\textbf{11/11}}\\ \small testes da Parte I
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- Parte II
 \section{Parte II -- RSA-OAEP}
-\begin{frame}{RSA-OAEP}{MGF1 e detecção de adulteração}
-  % TODO Ana
+\begin{frame}{Parte II -- RSA-OAEP}{Codificação: Feistel de duas rodadas com MGF1}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.58\textwidth}
+      \centering
+      \begin{tikzpicture}[x=1mm, y=1mm]
+        \node[bloco, minimum width=18mm] (seed) at (0,32) {seed (32 B)};
+        \node[bloco, minimum width=44mm, fill=softgreen] (db) at (42,32) {lHash $\Vert$ PS $\Vert$ 01 $\Vert$ M};
+        \node[mgf] (g1) at (21,20) {MGF1};
+        \node[op] (x1) at (42,20) {$\oplus$};
+        \node[mgf] (g2) at (21,8) {MGF1};
+        \node[op] (x2) at (0,8) {$\oplus$};
+        \node[bloco, minimum width=18mm] (ms) at (0,-4) {maskedSeed};
+        \node[bloco, minimum width=44mm, fill=softgreen] (mdb) at (42,-4) {maskedDB};
+        \draw[arrow] (seed) -- (x2);
+        \draw[arrow] (0,20) -- (g1);
+        \draw[arrow] (g1) -- (x1);
+        \draw[arrow] (db) -- (x1);
+        \draw[arrow] (x1) -- (mdb);
+        \draw[arrow] (42,8) -- (g2);
+        \draw[arrow] (g2) -- (x2);
+        \draw[arrow] (x2) -- (ms);
+        \fill[unbgreen] (0,20) circle (0.7);
+        \fill[unbgreen] (42,8) circle (0.7);
+        \node[font=\scriptsize] at (21,-13) {EM $= 00 \Vert$ maskedSeed $\Vert$ maskedDB \ (256 bytes) \ $\rightarrow$ \ $c = EM^e \bmod n$};
+      \end{tikzpicture}
+    \column{0.40\textwidth}
+      \begin{itemize}
+        \item \textbf{MGF1}: $\text{SHA3}(Z \Vert 0) \Vert \text{SHA3}(Z \Vert 1) \Vert \dots$
+        \item \textbf{seed} aleatória do \texttt{secrets}: cifragem probabilística.
+        \item As duas máscaras amarram tudo: mudar 1 bit embaralha o bloco inteiro.
+        \item Limite: $k - 2\,hLen - 2 = $ \textbf{190 bytes}.
+      \end{itemize}
+  \end{columns}
+  \source{RFC 8017, Seção 7.1 e Apêndice B.2.1; Bellare e Rogaway (1994).}
 \end{frame}
 
+\begin{frame}{Parte II -- RSA-OAEP}{Decifragem sem oráculo de padding}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.50\textwidth}
+      \begin{block}{Verificações na decodificação}
+        \begin{itemize}
+          \item tamanho $= k$ e $c < n$;
+          \item primeiro byte $= 00$;
+          \item $lHash'$ igual ao SHA3-256 do rótulo;
+          \item separador $01$ depois dos zeros.
+        \end{itemize}
+      \end{block}
+      \begin{alertblock}{Uma única resposta}
+        Toda falha gera \texttt{falha na decifração}. O laço percorre o bloco inteiro e o $lHash$ é comparado com \texttt{hmac.compare\_digest}.
+        Respostas diferentes seriam um oráculo (Manger, 2001).
+      \end{alertblock}
+    \column{0.46\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{tempo_oaep.pdf}\\
+      {\scriptsize cifrar $\approx$ 0,15 ms \quad decifrar $\approx$ 6,5 ms}
+      \vspace{4pt}
+      \begin{itemize}
+        \item 20 testes + 3 de interoperabilidade com a \texttt{pycryptodome}, nos dois sentidos.
+      \end{itemize}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- Parte III
 \section{Parte III -- RSA-PSS}
-\begin{frame}{RSA-PSS}{Salt, MGF1 e Base64}
-  % TODO Marina
+\begin{frame}{Parte III -- RSA-PSS}{Codificação EMSA-PSS}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.58\textwidth}
+      \centering
+      \begin{tikzpicture}[x=1mm, y=1mm]
+        \node[bloco, minimum width=52mm] (mp) at (24,34) {$00 \times 8 \ \Vert\ $ mHash $\ \Vert\ $ salt};
+        \node[mgf] (h) at (40,23) {SHA3-256};
+        \node[bloco, minimum width=38mm, fill=softgreen] (db) at (6,23) {PS $\Vert$ 01 $\Vert$ salt};
+        \node[mgf] (g) at (40,11) {MGF1};
+        \node[op] (x) at (6,11) {$\oplus$};
+        \node[bloco, minimum width=38mm, fill=softgreen] (mdb) at (6,-1) {maskedDB};
+        \node[bloco, minimum width=14mm] (hh) at (46,-1) {H};
+        \node[bloco, minimum width=9mm, fill=softred] (bc) at (58,-1) {bc};
+        \draw[arrow] (40,30.5) -- (h);
+        \draw[arrow] (h) -- (g);
+        \draw[arrow] (g) -- (x);
+        \draw[arrow] (db) -- (x);
+        \draw[arrow] (x) -- (mdb);
+        \fill[unbgreen] (40,17) circle (0.7);
+        \draw[arrow] (40,17) -- (50,17) -- (50,2.6);
+        \node[font=\scriptsize] at (24,-10) {EM $=$ maskedDB $\Vert$ H $\Vert$ bc \ (bit mais alto zerado) \ $\rightarrow$ \ $s = EM^d \bmod n$};
+      \end{tikzpicture}
+    \column{0.40\textwidth}
+      \begin{itemize}
+        \item mHash $=$ SHA3-256 do \textbf{arquivo}.
+        \item \textbf{salt} aleatório de 32 bytes: mesma entrada, assinaturas diferentes.
+        \item Reusa a \textbf{MGF1} da Parte II.
+        \item Assinatura de 256 bytes gravada em \textbf{Base64}.
+      \end{itemize}
+  \end{columns}
+  \source{RFC 8017, Seções 8.1 e 9.1; Bellare e Rogaway (1996).}
 \end{frame}
 
+\begin{frame}{Parte III -- RSA-PSS}{Não é ``cifrar o hash''}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.50\textwidth}
+      \begin{alertblock}{Abordagem rejeitada pelo roteiro}
+        \centering $s = H(m)^d \bmod n$\\[3pt]
+        \raggedright Determinística e herda a maleabilidade do RSA puro.
+      \end{alertblock}
+      \begin{block}{O que o PSS acrescenta}
+        \begin{itemize}
+          \item salt aleatório e máscara MGF1 sobre todo o módulo;
+          \item estrutura verificável: PS, $01$, trailer $0xbc$;
+          \item prova de segurança ligada ao problema RSA.
+        \end{itemize}
+      \end{block}
+    \column{0.46\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{tempo_pss.pdf}\\
+      {\scriptsize assinar $\approx$ 6,6 ms \quad verificar $\approx$ 0,2 ms}
+      \vspace{4pt}
+      \begin{itemize}
+        \item 5 assinaturas do mesmo arquivo: \textbf{5 diferentes}.
+        \item Teste garante que $s^e \bmod n \neq H(m)$.
+      \end{itemize}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- Parte IV
 \section{Parte IV -- Verificação}
-\begin{frame}{Verificação e adulteração}{Arquivo, assinatura e chave pública}
-  % TODO Pedro
+\begin{frame}[fragile]{Parte IV -- Verificação}{Estrutura assinada e parsing}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.55\textwidth}
+      \begin{block}{Arquivo \texttt{documento.txt.sig}}
+\scriptsize
+\begin{verbatim}
+-----BEGIN RSA-SEGCOMP SIGNATURE-----
+{"formato": "rsa-segcomp-assinatura-v1",
+ "algoritmo": "RSASSA-PSS",
+ "hash": "SHA3-256",
+ "mgf": "MGF1-SHA3-256",
+ "tamanho_salt": 32,
+ "arquivo": "documento.txt",
+ "assinatura": "YB+vKXyb/uFd...=="}
+-----END RSA-SEGCOMP SIGNATURE-----
+\end{verbatim}
+      \end{block}
+    \column{0.41\textwidth}
+      \begin{enumerate}
+        \item Valida delimitadores, JSON e campos.
+        \item Algoritmo, hash e MGF comparados com valores fixos (sem \textit{downgrade}).
+        \item Base64 decodificado com \texttt{validate=True}.
+        \item Recalcula o SHA3-256 do arquivo.
+        \item RSASSA-PSS-VERIFY com a chave pública.
+      \end{enumerate}
+      \vspace{4pt}
+      \small Nenhuma exceção escapa: toda falha vira \textbf{ASSINATURA INVÁLIDA}.
+  \end{columns}
 \end{frame}
 
+\begin{frame}{Parte IV -- Verificação}{Testes de adulteração exigidos}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.58\textwidth}
+      \centering\small
+      \begin{tabular}{lcc}
+        \toprule
+        \textbf{Cenário} & \textbf{Resultado} & \textbf{Onde falha} \\
+        \midrule
+        Original (controle) & {\color{unbgreen}\textbf{Válida}} & -- \\
+        (a) 1 byte do arquivo & {\color{red}\textbf{Inválida}} & hash $H$ \\
+        (b) 1 byte da assinatura & {\color{red}\textbf{Inválida}} & padding / $H$ \\
+        (c) outra chave pública & {\color{red}\textbf{Inválida}} & padding / $H$ \\
+        (d) \texttt{.sig} malformado & {\color{red}\textbf{Inválida}} & parsing \\
+        \bottomrule
+      \end{tabular}
+    \column{0.38\textwidth}
+      \begin{block}{Por que sempre falha}
+        Um bit diferente no arquivo muda o SHA3-256 inteiro. Na assinatura ou na chave, $s^e \bmod n$ vira um bloco aleatório, sem $0xbc$, sem o $01$ e sem o $H$ correto.
+      \end{block}
+  \end{columns}
+  \source{\texttt{parte4\_verificacao/testes/test\_adulteracao.py} e \texttt{exemplos/demo.sh}.}
+\end{frame}
+
+% ---------------------------------------------------------------- Parte V
 \section{Parte V -- Análise de segurança}
-\begin{frame}{Análise de segurança}{Textbook RSA, OAEP, PSS e Ed25519}
-  % TODO Pedro
+\begin{frame}{Parte V -- Análise de segurança}{Por que não usar RSA puro}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{alertblock}{RSA sem padding}
+        \begin{itemize}
+          \item \textbf{Determinístico:} mesma mensagem, mesmo ciphertext (ataque de dicionário).
+          \item \textbf{Maleável:} $E(m_1)\,E(m_2) = E(m_1 m_2)$; assinaturas também se combinam.
+          \item \textbf{Mensagem pequena:} com $e = 3$ e $m^3 < n$, basta a raiz cúbica.
+        \end{itemize}
+      \end{alertblock}
+    \column{0.48\textwidth}
+      \begin{block}{OAEP na cifragem}
+        Seed aleatória e Feistel com MGF1: cifragem probabilística e adulteração detectada. Segurança IND-CCA2.
+      \end{block}
+      \begin{block}{PSS na assinatura}
+        Salt aleatório, MGF1 e estrutura verificável: não dá para forjar combinando assinaturas.
+      \end{block}
+  \end{columns}
+  \source{RFC 8017; Bellare e Rogaway (1994, 1996).}
 \end{frame}
 
-\section{Demonstração}
-\begin{frame}{Demonstração}
-  \centering\large \texttt{bash exemplos/demo.sh}
+\begin{frame}{Parte V -- Análise de segurança}{RSA-PSS \textit{versus} Ed25519}
+  \centering\small
+  \begin{tabular}{lll}
+    \toprule
+    & \textbf{RSA-PSS (2048 bits)} & \textbf{Ed25519} \\
+    \midrule
+    Problema difícil & fatoração / problema RSA & logaritmo discreto em curva elíptica \\
+    Segurança aproximada & $\sim$112 bits & $\sim$128 bits \\
+    Chave pública & 256 bytes & 32 bytes \\
+    Assinatura & 256 bytes & 64 bytes \\
+    Aleatoriedade & salt novo a cada assinatura & nonce determinístico \\
+    Assinar / verificar & lento / rápido & rápido / rápido \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{10pt}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+      \begin{block}{Vantagem do Ed25519}
+        Chaves e assinaturas bem menores, e não depende de um bom gerador aleatório na hora de assinar.
+      \end{block}
+    \column{0.48\textwidth}
+      \begin{alertblock}{Limite comum}
+        Ambos são quebrados por computação quântica (Shor). Alternativas: ML-DSA e SLH-DSA.
+      \end{alertblock}
+  \end{columns}
+  \source{RFC 8032; FIPS 186-5; FIPS 204 e 205.}
 \end{frame}
 
-\section{Conclusão}
-\begin{frame}{Conclusão}
-  % TODO
+% ---------------------------------------------------------------- Resultados
+\section{Testes e demonstração}
+\begin{frame}{Testes e demonstração}{Suíte automatizada e interoperabilidade}
+  \begin{columns}[c,onlytextwidth]
+    \column{0.52\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{resultado_testes.pdf}
+    \column{0.44\textwidth}
+      \begin{block}{Resultado da suíte}
+        \centering
+        {\fontsize{28}{32}\selectfont\color{unbgreen}\textbf{52/52}}\\[4pt]
+        testes aprovados
+      \end{block}
+      \begin{itemize}
+        \item \textbf{PSS} $\leftrightarrow$ \texttt{cryptography}, nos dois sentidos.
+        \item \textbf{OAEP} $\leftrightarrow$ \texttt{pycryptodome}: a \texttt{cryptography} não aceita SHA3 no OAEP.
+        \item As bibliotecas só conferem a nossa saída.
+      \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Testes e demonstração}{\texttt{bash exemplos/demo.sh}}
+  \centering
+  \includegraphics[height=0.80\textheight]{06_demo_completo.png}
+\end{frame}
+
+% ---------------------------------------------------------------- Conclusões
+\section{Conclusões}
+\begin{frame}{Conclusões}{O que o trabalho demonstrou}
+  \begin{itemize}
+    \item Chaves RSA-2048 geradas em 0,365 s em média, com Miller-Rabin calibrado pela FIPS 186-5.
+    \item O OAEP cifra até 190 bytes e rejeita qualquer adulteração com um único erro.
+    \item O PSS produz assinaturas diferentes para o mesmo arquivo, verificáveis com a chave pública.
+    \item Os três cenários de adulteração do roteiro foram rejeitados, e os 52 testes passaram.
+  \end{itemize}
+
+  \vspace{6pt}
+  \begin{block}{Conclusão central}
+    A segurança não vem do RSA isolado, e sim do \textbf{padding probabilístico}: OAEP para cifrar e PSS para assinar, cada um com seu papel.
+  \end{block}
 \end{frame}
 
 \end{document}
