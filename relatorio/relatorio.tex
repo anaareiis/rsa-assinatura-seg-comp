@@ -3,15 +3,21 @@
 \usepackage[T1]{fontenc}
 \usepackage[brazilian]{babel}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{graphicx}
 \usepackage{float}
 \usepackage{booktabs}
 \usepackage[hidelinks]{hyperref}
+\usepackage{placeins}
+
+% Ajuste sutil de margens e separadores de flutuantes para padrão IEEE
+\setlength{\dbltextfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\dblfloatsep}{8pt plus 2pt minus 2pt}
 
 \begin{document}
 
-\title{Sistema de Assinatura Digital com RSA-OAEP e RSA-PSS\\
-\large Trabalho de Implementação 2 --- CIC0201 Segurança Computacional}
+\title{\includegraphics[height=0.8cm]{figs/logo_unb.png}\quad Sistema de Assinatura Digital com RSA-OAEP e RSA-PSS\\
+\large Trabalho de Implementação 2 --- CIC0201 Segurança Computacional --- Universidade de Brasília}
 
 \author{
 \IEEEauthorblockN{Ana Luísa Reis Nascente}
@@ -30,62 +36,360 @@
 \maketitle
 
 \begin{abstract}
-% TODO (até 5 linhas): o que foi implementado (chaves RSA-2048 com
-% Miller-Rabin, OAEP e PSS com SHA3-256/MGF1), como foi validado (testes de
-% adulteração e interoperabilidade) e principal resultado.
+Implementamos RSA-OAEP e RSA-PSS com SHA3-256/MGF1 e chaves de 2048 bits
+via Miller-Rabin, sem bibliotecas criptográficas de alto nível. Testes
+automatizados validaram o limite de 190 bytes do OAEP, a natureza
+probabilística do PSS e a matriz de adulteração da Parte IV; OAEP e PSS
+interoperam, nos dois sentidos, com bibliotecas de referência.
 \end{abstract}
 
 \begin{IEEEkeywords}
-RSA, OAEP, PSS, assinatura digital, SHA-3
+RSA-OAEP, RSA-PSS, Assinatura Digital, SHA3-256
 \end{IEEEkeywords}
 
 \section{Introdução}
-% Contexto: criptografia assimétrica na disciplina; diferença entre usar o
-% RSA para cifragem e para assinatura \cite{roteiro,rfc8017}.
-% Última frase: organização do relatório (Seções II, III, IV).
 
-\section{Fundamentação Teórica}
+A criptografia assimétrica é o pilar para estabelecer canais seguros,
+autenticidade e não repúdio em sistemas computacionais modernos. No âmbito
+da disciplina CIC0201 --- Segurança Computacional, o Trabalho de
+Implementação 2 propõe a construção de um ambiente integrado para geração
+de chaves, cifragem de mensagens curtas e assinatura/verificação segura de
+arquivos utilizando o criptossistema RSA \cite{roteiro}.
+
+Diferentemente do uso ingênuo do RSA (``textbook RSA''), cujas propriedades
+matemáticas determinísticas e multiplicativas o tornam vulnerável a ataques
+de texto claro escolhido e a forjamento de assinaturas, aplicações práticas
+exigem esquemas de codificação probabilísticos padronizados pela norma
+PKCS \#1 v2.2 (RFC 8017) \cite{rfc8017}. Empregou-se o RSA-OAEP
+(\textit{Optimal Asymmetric Encryption Padding}) para confidencialidade com
+segurança IND-CCA2 e o RSA-PSS (\textit{Probabilistic Signature Scheme})
+para integridade e autenticidade -- explicitamente sem tratar a assinatura
+como uma simples ``cifragem do hash''.
+
+O sistema foi estruturado de forma modular em Python 3, restrito à
+biblioteca padrão para os cálculos numéricos e transformações de bits
+(\texttt{secrets} para aleatoriedade criptográfica e
+\texttt{hashlib.sha3\_256} para o digest) \cite{fips202}; bibliotecas
+consolidadas foram usadas apenas no teste adicional de interoperabilidade,
+conforme permitido pelo enunciado.
+
+Este relatório está organizado da seguinte forma: a
+Seção~\ref{sec:fundamentacao} descreve a fundamentação teórica, o fluxo dos
+algoritmos e a análise de segurança (Parte V); a
+Seção~\ref{sec:experimental} detalha o ambiente experimental e a análise de
+resultados de cada parte, incluindo a matriz de adulteração e os ensaios de
+interoperabilidade; e a Seção~\ref{sec:conclusoes} sintetiza as conclusões
+técnicas alcançadas.
+
+\section{Fundamentação Teórica e Arquitetura}
 \label{sec:fundamentacao}
 
-\subsection{RSA e geração de chaves}
-% n = pq, lambda(n), e = 65537, d, CRT; Miller-Rabin \cite{sp80056b,fips1865}.
+\subsection{RSA e Geração de Chaves com Miller-Rabin}
 
-\subsection{Função hash SHA3-256 e MGF1}
-% Esponja Keccak \cite{fips202}; MGF1 como gerador de máscara.
+O algoritmo RSA fundamenta-se na dificuldade computacional de fatorar
+inteiros compostos grandes obtidos pelo produto de dois primos aleatórios
+$p$ e $q$ \cite{sp80056b}. A geração do par de chaves segue os passos: (1)
+gerar $p$ e $q$ com metade dos bits do módulo, distintos e afastados em
+pelo menos $2^{bits/2 - 100}$ (FIPS 186-5, Apêndice A.1.1); (2) calcular
+$n = pq$ e $\lambda(n) = \mathrm{mmc}(p-1, q-1)$; (3) fixar $e = 65537$ e
+calcular $d = e^{-1} \bmod \lambda(n)$ pelo algoritmo estendido de Euclides;
+(4) derivar os parâmetros CRT $d_p = d \bmod (p-1)$, $d_q = d \bmod (q-1)$
+e $q_{inv} = q^{-1} \bmod p$, usados para acelerar as operações com a
+chave privada.
+
+A primalidade de $p$ e $q$ é verificada pelo teste probabilístico de
+Miller-Rabin \cite{fips1865}. Dado um candidato ímpar $n$, escreve-se
+$n - 1 = 2^s d$, com $d$ ímpar. Para uma base aleatória
+$a \in [2, n-2]$, calcula-se $x = a^d \bmod n$; se $x = 1$ ou $x = n-1$,
+$n$ passa na rodada, senão repete-se o quadrado $x \leftarrow x^2 \bmod n$
+por $s-1$ vezes. Antes do teste probabilístico, um crivo de Eratóstenes com
+limite $10^3$ descarta rapidamente a maioria dos candidatos compostos sem
+exponenciação modular. O número de rodadas não é fixo: a implementação usa
+a Tabela B.1 da FIPS 186-5, que, para primos de 1024 bits (módulo de 2048
+bits) e probabilidade de erro $\le 2^{-100}$, exige apenas
+\textbf{4 rodadas} -- muito menos que o limite genérico de pior caso
+($4^{-t}$ por rodada, válido para qualquer composto), pois a fração de
+candidatos aleatórios que sobrevivem a $t$ rodadas cai mais rápido que essa
+cota \cite{dlp93}.
+
+\subsection{Função Hash SHA3-256 e MGF1}
+
+O padrão SHA-3 adota a construção de esponja sobre a permutação
+Keccak-\textit{f}[1600] \cite{fips202}, produzindo resumos de 256 bits (32
+bytes) com alta resistência a colisão e pré-imagem. A Função de Geração de
+Máscara MGF1 (RFC 8017 \cite{rfc8017}) expande uma semente $Z$ para uma
+máscara de tamanho arbitrário $L$ encadeando hashes indexados por um
+contador de 4 bytes:
+\begin{equation}
+T = \text{SHA3\text{-}256}(Z \Vert c_0) \Vert \text{SHA3\text{-}256}(Z \Vert c_1) \Vert \dots
+\end{equation}
+truncado para os primeiros $L$ bytes.
 
 \subsection{RSA-OAEP}
-% Codificação EME-OAEP, Feistel de duas rodadas, IND-CCA2 \cite{rfc8017}.
+
+O esquema EME-OAEP impede ataques de texto claro escolhido com uma rede de
+Feistel de duas rodadas aplicada à mensagem antes da exponenciação modular
+\cite{rfc8017}. Para módulo $n$ de $k=256$ bytes (2048 bits) e
+$hLen = 32$ bytes: a mensagem $M$ deve ter
+$mLen \le k - 2hLen - 2 = 190$ bytes; concatena-se
+$lHash = \text{SHA3-256}(L)$ (rótulo, vazio por padrão), o preenchimento
+$PS$, o separador $0x01$ e $M$, formando o bloco $DB$ de $k-hLen-1=223$
+bytes; gera-se uma semente aleatória $seed$ de 32 bytes
+(\texttt{secrets.token\_bytes}); calcula-se
+$maskedDB = DB \oplus \text{MGF1}(seed, 223)$ e
+$maskedSeed = seed \oplus \text{MGF1}(maskedDB, 32)$; o bloco codificado
+$EM = 0x00 \Vert maskedSeed \Vert maskedDB$ é cifrado como
+$c = m^e \bmod n$. Na decifragem, qualquer desvio no tamanho, no byte
+inicial, no $lHash$ ou no separador resulta na mesma rejeição genérica;
+a decodificação percorre todo o bloco sem sair antecipadamente e testa as
+condições de uma só vez, para não criar um oráculo de padding
+\cite{manger01}.
 
 \subsection{RSA-PSS}
-% EMSA-PSS, salt, trailer 0xbc; por que não é ``cifrar o hash''.
 
-\subsection{Análise de segurança}
-% Parte V: textbook RSA (determinismo, maleabilidade, e pequeno),
-% papel do OAEP e do PSS, comparação com Ed25519 \cite{rfc8032}.
-% Ver parte5_analise/README.md.
+O esquema EMSA-PSS associa um \textit{salt} aleatório ao digest do arquivo
+para tornar a assinatura probabilística \cite{fips1865}. Com
+$sLen = 32$ bytes: calcula-se $mHash = \text{SHA3-256}(M)$; forma-se
+$M' = 0x00_8 \Vert mHash \Vert salt$ e $H = \text{SHA3-256}(M')$; monta-se
+$DB = PS \Vert 0x01 \Vert salt$; calcula-se
+$maskedDB = DB \oplus \text{MGF1}(H, k-hLen-1)$, zerando o bit mais
+significativo; o bloco final é $EM = maskedDB \Vert H \Vert 0xBC$ e a
+assinatura é $s = EM^d \bmod n$ (primitiva RSASP1, com CRT). Na
+verificação, extrai-se $H$ e $maskedDB$ de $EM = s^e \bmod n$, remove-se a
+máscara, recupera-se o \textit{salt}, reconstrói-se $M'$ e compara-se
+$\text{SHA3-256}(M')$ com $H$.
+
+\subsection{Análise de Segurança (Parte V)}
+
+\subsubsection{Fragilidades do RSA puro (\textit{textbook RSA})}
+Aplicar RSA diretamente sobre $m$ ($c=m^e \bmod n$ ou $s=m^d \bmod n$) é
+inseguro: (i) \textbf{determinismo} -- mensagens idênticas geram
+ciphertexts/assinaturas idênticos, permitindo ataques de dicionário; (ii)
+\textbf{maleabilidade multiplicativa} -- como
+$(m_1 m_2)^e \equiv m_1^e m_2^e \pmod n$, um atacante combina ciphertexts
+ou assinaturas válidos para forjar $m_1 m_2$; (iii) \textbf{expoente
+pequeno} -- com $e=3$ e mensagem curta ($m^e < n$), basta extrair a raiz
+cúbica inteira do ciphertext (ataque de Håstad).
+
+\subsubsection{Papel do OAEP e do PSS}
+O OAEP elimina o determinismo e a maleabilidade injetando aleatoriedade e
+espalhando a mensagem por todo o bloco codificado, com segurança IND-CCA2
+provada no modelo de oráculo aleatório \cite{br94}. O PSS
+estende o hash com \textit{salt} aleatório e tem redução de segurança
+\textit{tight} ao problema RSA no mesmo modelo \cite{br96} -- ao contrário do PKCS\#1
+v1.5, historicamente vulnerável a ataques como o de Bleichenbacher (2006)
+\cite{rfc8017}.
+
+\subsubsection{RSA-PSS \textit{versus} Ed25519}
+A Tabela~\ref{tab:comparativo} contrasta o RSA-PSS implementado com a
+alternativa moderna em curvas elípticas Ed25519 (RFC 8032)
+\cite{rfc8032}. Ambos são quebrados por um computador quântico suficiente
+grande via algoritmo de Shor; alternativas pós-quânticas incluem ML-DSA
+(FIPS 204) e SLH-DSA (FIPS 205).
+
+\begin{table}[!t]
+\caption{RSA-PSS (2048 bits) \textit{versus} Ed25519}
+\label{tab:comparativo}
+\centering
+\small
+\begin{tabular}{l p{2.9cm} p{2.9cm}}
+\toprule
+\textbf{Característica} & \textbf{RSA-PSS} & \textbf{Ed25519} \\
+\midrule
+Problema difícil & Fatoração / RSA & Log discreto (curva) \\
+Segurança & $\sim$112 bits & $\sim$128 bits \\
+Chave pública & 256 bytes & 32 bytes \\
+Assinatura & 256 bytes & 64 bytes \\
+Aleatoriedade & \textit{Salt} por assinatura & Nonce determinístico \\
+Assinar / verificar & Lento / rápido & Rápido / rápido \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Ambiente Experimental e Análise de Resultados}
 \label{sec:experimental}
 
 \subsection{Descrição do Cenário}
-% Hardware, SO, versão do Python, bibliotecas permitidas (hashlib, secrets),
-% arquitetura do código (partes I--IV), formato das chaves e da assinatura.
 
-\subsection{Análise de Resultados}
-% Parte I: tempo de geração das chaves, rodadas de Miller-Rabin.
-% Parte II: ida e volta OAEP, tamanho máximo (190 bytes), detecção de
-%           ciphertext adulterado e rótulo errado.
-% Parte III: assinaturas probabilísticas, Base64.
-% Parte IV: tabela com os casos (a) byte do arquivo, (b) byte da assinatura,
-%           (c) chave pública -> resultado esperado x obtido.
-% Interoperabilidade com a biblioteca cryptography.
-% Problemas encontrados e soluções.
+O projeto foi organizado em módulos independentes, um por parte do
+enunciado: \texttt{parte1\_chaves/} (aritmética modular, Miller-Rabin,
+geração e formato PEM-like das chaves); \texttt{parte2\_oaep/} (MGF1 e
+codificação/decodificação OAEP); \texttt{parte3\_pss/} (EMSA-PSS e
+assinatura de arquivos em Base64); \texttt{parte4\_verificacao/} (parsing
+estrito da estrutura JSON \texttt{rsa-segcomp-assinatura-v1} e verificação
+de integridade); e \texttt{rsa\_cli.py}, uma CLI integrada que expõe os
+subcomandos \texttt{gerar-chaves}, \texttt{cifrar}, \texttt{decifrar},
+\texttt{assinar} e \texttt{verificar}. Cada módulo tem suíte própria de
+testes automatizados com \texttt{unittest}, além de testes de
+interoperabilidade com as bibliotecas \texttt{cryptography} (PSS) e
+\texttt{pycryptodome} (OAEP), permitidas pelo enunciado apenas para essa
+verificação cruzada.
+
+Os experimentos a seguir foram executados em uma máquina com processador
+AMD Ryzen 9 5900XT (16 núcleos/32 threads), 32~GB de RAM, sistema
+operacional Ubuntu 24.04.4 LTS e Python 3.12.3, sem qualquer aceleração de
+hardware específica para aritmética de precisão arbitrária (apenas o tipo
+\texttt{int} nativo do CPython).
+
+\subsection{Geração de Chaves (Parte I)}
+
+A Figura~\ref{fig:demo} (linha ``1.'') mostra a geração de um par de
+chaves RSA-2048 pela CLI. Em 8 execuções de \texttt{gerar\_par\_chaves()},
+o tempo total (geração de $p$, $q$ e dos parâmetros CRT) foi, em média,
+\textbf{0,365~s} (mínimo 0,046~s, máximo 0,823~s -- Figura~\ref{fig:tempo-chaves}),
+variação esperada porque o número de candidatos ímpares testados até achar
+um primo de 1024 bits é uma variável aleatória: nas mesmas execuções, cada
+primo exigiu entre 14 e 794 candidatos (Figura~\ref{fig:candidatos}), com
+apenas \textbf{4 rodadas} de Miller-Rabin por candidato, conforme a Tabela
+B.1 da FIPS 186-5 (Seção~\ref{sec:fundamentacao}). Nenhuma execução
+produziu falso positivo: todas as chaves passaram nos testes de
+importação/exportação (\texttt{test\_exportacao\_importacao}) e nas
+primitivas RSA de ida e volta.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.85\linewidth]{figs/tempo_geracao_chaves.pdf}
+\caption{Tempo de geração de chaves RSA-2048 em 8 execuções.}
+\label{fig:tempo-chaves}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.85\linewidth]{figs/candidatos_miller_rabin.pdf}
+\caption{Candidatos ímpares testados até obter cada primo de 1024 bits.}
+\label{fig:candidatos}
+\end{figure}
+
+\subsection{Cifragem e Decifragem OAEP (Parte II)}
+
+Testes de ida e volta com mensagens de 0 a 190 bytes confirmaram
+integridade total. O limite foi verificado experimentalmente: cifrar 191
+bytes retorna \texttt{ErroParametro: mensagem longa demais: máximo de 190
+bytes}, exatamente o previsto por $k - 2hLen - 2$. A Figura~\ref{fig:oaep}
+mostra que o tempo de cifrar é praticamente constante ($\approx$0,15~ms,
+dominado pela exponenciação com $e=65537$) e independe do tamanho da
+mensagem, enquanto decifrar é $\approx$40$\times$ mais lento
+($\approx$6,5~ms), pois usa o expoente privado completo com CRT --
+assimetria clássica do RSA. Invertendo um único bit do ciphertext antes de
+decifrar, a implementação rejeitou com \texttt{ErroDecifracao: falha na
+decifração} em todos os casos (Figura~\ref{fig:demo}, linha ``2.''),
+sem revelar qual verificação do padding falhou.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.9\linewidth]{figs/tempo_oaep.pdf}
+\caption{Tempo de cifrar/decifrar RSA-OAEP por tamanho de mensagem.}
+\label{fig:oaep}
+\end{figure}
+
+\subsection{Assinatura Probabilística RSA-PSS (Parte III)}
+
+Assinando o mesmo arquivo cinco vezes com a mesma chave privada, as cinco
+strings Base64 resultantes foram todas distintas entre si (nenhuma
+repetição), confirmando a natureza probabilística do \textit{salt} de 32
+bytes -- e não uma simples ``cifragem do hash'', que seria determinística.
+O tempo de assinar (média 6,6~ms) e de verificar (0,196~ms,
+$\approx$34$\times$ mais rápido) reproduzem a mesma assimetria observada no
+OAEP (Figura~\ref{fig:pss}), pois assinar usa a chave privada e verificar
+usa apenas o expoente público.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.9\linewidth]{figs/tempo_pss.pdf}
+\caption{Tempo de assinar (5 execuções) \textit{versus} verificar (RSA-PSS).}
+\label{fig:pss}
+\end{figure}
+
+\subsection{Verificação e Matriz de Adulteração (Parte IV)}
+
+A Tabela~\ref{tab:testes_adulteracao} resume a suíte
+\texttt{test\_adulteracao.py} e a reprodução manual via CLI, mostrada na
+Figura~\ref{fig:demo} (linha ``4.''). Em todos os cenários de adulteração
+a verificação retornou \texttt{ASSINATURA INVÁLIDA}; apenas o par
+arquivo/assinatura original e sem alterações foi aceito.
+
+\begin{table}[!t]
+\caption{Matriz de testes de adulteração (Parte IV)}
+\label{tab:testes_adulteracao}
+\centering
+\small
+\begin{tabular}{p{3.6cm} c p{2.3cm}}
+\toprule
+\textbf{Cenário} & \textbf{Resultado} & \textbf{Mecanismo} \\
+\midrule
+Original (controle) & Válido & PSS-VERIFY \\
+(a) 1 byte do arquivo alterado & Inválido & PSS-VERIFY \\
+(b) 1 byte da assinatura alterado & Inválido & PSS-VERIFY \\
+(c) chave pública diferente & Inválido & PSS-VERIFY \\
+(d) delimitador do \texttt{.sig} corrompido & Inválido & \texttt{ErroFormato} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Em todos os casos, \texttt{verificar\_arquivo} captura as exceções
+internamente e retorna \texttt{ResultadoVerificacao(valido=False, \dots)},
+de modo que a CLI nunca é interrompida abruptamente por entrada
+maliciosa ou malformada -- ela retorna o código de saída 2 e uma mensagem
+clara (Figura~\ref{fig:demo}).
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\linewidth]{figs/06_demo_completo.png}
+\caption{\texttt{bash exemplos/demo.sh}: geração de chaves, cifra/decifra OAEP com ciphertext adulterado, assinatura PSS e os três testes de adulteração da Parte IV, em execução real.}
+\label{fig:demo}
+\end{figure*}
+
+\subsection{Interoperabilidade e Suíte Automatizada}
+
+Os testes adicionais de interoperabilidade usam bibliotecas consolidadas
+apenas para conferir a saída da implementação, conforme permitido pelo
+enunciado, sempre nos dois sentidos. Para o PSS, com a \texttt{cryptography}:
+(1) assinaturas geradas pela nossa implementação são aceitas pela
+biblioteca; e (2) assinaturas produzidas pela biblioteca são aceitas por
+\texttt{verificar\_digest} e, sobre um arquivo real, por
+\texttt{verificar\_arquivo}. Para o OAEP, a \texttt{cryptography} não
+aceita SHA3-256 como hash do OAEP, por isso a conferência usa a
+\texttt{pycryptodome}: ciphertexts gerados por nós (de 0 a 190 bytes) são
+decifrados pela biblioteca e vice-versa, inclusive com rótulo $L$ não
+vazio. A concordância dos digests SHA3-256, das máscaras MGF1 e do
+\textit{trailer} $0xBC$ confirma a conformidade com a RFC 8017.
+
+A suíte completa, reproduzida na Figura~\ref{fig:testes}, executou
+\textbf{52 testes, todos aprovados},
+dos quais 6 de interoperabilidade. A Figura~\ref{fig:resultado-testes}
+discrimina os testes por parte do trabalho. Sem as bibliotecas opcionais
+instaladas, os testes de interoperabilidade são pulados automaticamente
+e os demais continuam executando.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.95\linewidth]{figs/resultado_testes.pdf}
+\caption{Testes aprovados por parte (52 no total; em azul, os de interoperabilidade).}
+\label{fig:resultado-testes}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.85\linewidth]{figs/05_testes.png}
+\caption{Execução real de \texttt{python3 -m unittest discover -p "test\_*.py" -v}.}
+\label{fig:testes}
+\end{figure}
+
+\FloatBarrier
 
 \section{Conclusões}
 \label{sec:conclusoes}
-% Entre 5 e 10 linhas.
 
-\begin{thebibliography}{9}
+O sistema cumpriu as Partes I a V sem bibliotecas criptográficas para
+geração de chaves, operações RSA, OAEP, MGF1 ou PSS. As chaves RSA-2048
+foram geradas em 0,365~s em média, com 4 rodadas de Miller-Rabin por
+candidato. O OAEP rejeitou mensagens acima de 190 bytes e qualquer
+ciphertext adulterado com um erro único, e o PSS gerou assinaturas
+distintas para o mesmo arquivo. Todos os cenários de adulteração foram
+rejeitados, e os 52 testes passaram, com interoperabilidade nos dois
+sentidos. A segurança vem do padding probabilístico, não do RSA isolado.
+
+\begin{thebibliography}{10}
 
 \bibitem{roteiro}
 P.~S.~Barreto, ``Trabalho de Implementação 2 -- Sistema de Assinatura Digital e Verificação Segura de Arquivos,'' CIC0201 Segurança Computacional, Universidade de Brasília, 2026.
@@ -104,6 +408,18 @@ NIST, ``Recommendation for Pair-Wise Key-Establishment Using Integer Factorizati
 
 \bibitem{rfc8032}
 S.~Josefsson e I.~Liusvaara, ``Edwards-Curve Digital Signature Algorithm (EdDSA),'' RFC 8032, IETF, 2017.
+
+\bibitem{dlp93}
+I.~Damgård, P.~Landrock e C.~Pomerance, ``Average case error estimates for the strong probable prime test,'' \textit{Mathematics of Computation}, vol.~61, n.~203, pp.~177--194, 1993.
+
+\bibitem{br94}
+M.~Bellare e P.~Rogaway, ``Optimal Asymmetric Encryption,'' em \textit{Advances in Cryptology -- EUROCRYPT '94}, LNCS 950, Springer, 1995, pp.~92--111.
+
+\bibitem{br96}
+M.~Bellare e P.~Rogaway, ``The Exact Security of Digital Signatures -- How to Sign with RSA and Rabin,'' em \textit{Advances in Cryptology -- EUROCRYPT '96}, LNCS 1070, Springer, 1996, pp.~399--416.
+
+\bibitem{manger01}
+J.~Manger, ``A Chosen Ciphertext Attack on RSA Optimal Asymmetric Encryption Padding (OAEP) as Standardized in PKCS \#1 v2.0,'' em \textit{Advances in Cryptology -- CRYPTO 2001}, LNCS 2139, Springer, 2001, pp.~230--238.
 
 \end{thebibliography}
 
