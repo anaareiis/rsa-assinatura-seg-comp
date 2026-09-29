@@ -28,7 +28,7 @@ SHA3-256 e MGF1, seguindo a RFC 8017 (PKCS #1 v2.2).
 - [x] Parte I — chaves RSA e Miller-Rabin
 - [x] Parte II — RSA-OAEP e MGF1
 - [x] Parte III — RSA-PSS
-- [ ] Parte IV — parsing e verificação
+- [x] Parte IV — parsing e verificação
 - [ ] Parte V — análise de segurança (rascunho em `parte5_analise/`)
 - [ ] Relatório e slides
 
